@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Antimatter Factory · AD / ELENA / Trap Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<style>
+  :root{
+    --void:#0b0612;
+    --panel:rgba(24,12,34,0.74);
+    --panel-solid:#150a1e;
+    --panel-2:rgba(30,16,42,0.75);
+    --line:rgba(230,180,255,0.16);
+    --line-soft:rgba(230,180,255,0.08);
+    --line-bright:rgba(255,150,210,0.5);
+    --gold:#f2c14e;
+    --gold-dim:#6e5324;
+    --teal:#4fe0c9;
+    --magenta:#ff3d81;
+    --violet:#b98bff;
+    --text:#c9bad8;
+    --text-dim:#8a7aa0;
+    --text-faint:#4d4260;
+    --mono:'IBM Plex Mono','Courier New',monospace;
+    --display:'Sora','Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--void);color:var(--text);font-family:var(--display);overflow:hidden;height:100%;}
+  ::selection{background:rgba(255,61,129,0.28);}
+
+  .grid-overlay{
+    position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.35;
+    background-image:
+      linear-gradient(rgba(190,140,255,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(190,140,255,0.05) 1px, transparent 1px);
+    background-size:44px 44px;
+    -webkit-mask-image:radial-gradient(ellipse 76% 66% at 50% 46%, #000 30%, transparent 86%);
+    mask-image:radial-gradient(ellipse 76% 66% at 50% 46%, #000 30%, transparent 86%);
+  }
+  .drift{
+    position:fixed;inset:0;z-index:3;pointer-events:none;opacity:.5;
+    background:radial-gradient(circle at 20% 30%, rgba(255,61,129,0.05), transparent 40%),
+               radial-gradient(circle at 80% 70%, rgba(79,224,201,0.05), transparent 40%);
+    animation:driftmove 14s ease-in-out infinite alternate;
+  }
+  @keyframes driftmove{0%{transform:translate(0,0);}100%{transform:translate(-2%,2%);}}
+
+  .panel,#focusCard{position:relative;}
+  .panel::before,#focusCard::before{
+    content:'';position:absolute;left:-1px;top:-1px;right:-1px;bottom:-1px;pointer-events:none;
+    border:1px solid transparent;
+    background:
+      linear-gradient(var(--panel-solid),var(--panel-solid)) padding-box,
+      linear-gradient(120deg, rgba(255,150,210,.35), rgba(185,139,255,.12) 40%, transparent 70%) border-box;
+    opacity:0;
+  }
+
+  #stage{position:fixed;inset:0;width:100vw;height:100vh;}
+  #stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  .vignette{
+    position:fixed;inset:0;pointer-events:none;z-index:5;
+    background:radial-gradient(ellipse 90% 80% at 50% 50%, transparent 52%, rgba(6,3,10,0.58) 100%);
+  }
+  .grain-note{position:fixed;bottom:10px;right:14px;z-index:6;font-family:var(--mono);font-size:9.5px;color:var(--text-faint);pointer-events:none;letter-spacing:.04em;text-align:right;line-height:1.5;opacity:.7;}
+  #flashOverlay{position:fixed;inset:0;z-index:7;pointer-events:none;background:radial-gradient(circle, #fff, #ff3d81);opacity:0;}
+
+  #loader{
+    position:fixed;inset:0;z-index:50;background:var(--void);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:16px;transition:opacity .6s ease;
+  }
+  #loader .orbit{position:relative;width:70px;height:70px;}
+  #loader .orbit .e1,#loader .orbit .e2{position:absolute;inset:0;border-radius:50%;border:1px solid rgba(255,150,210,.18);}
+  #loader .orbit .e2{inset:14px;border-color:rgba(79,224,201,.22);}
+  #loader .orbit .p{position:absolute;width:6px;height:6px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px var(--gold);top:2px;left:50%;margin-left:-3px;animation:orbitspin 1.6s linear infinite;transform-origin:3px 33px;}
+  @keyframes orbitspin{to{transform:rotate(360deg);}}
+  #loader .txt{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--text-faint);}
+  #loader .txt .accent{color:var(--gold);text-shadow:0 0 8px rgba(242,193,78,.5);}
+  #loader.hidden{opacity:0;pointer-events:none;}
+
+  #loadError{
+    position:fixed;inset:0;z-index:51;background:rgba(6,3,10,0.94);display:none;
+    align-items:center;justify-content:center;flex-direction:column;gap:10px;text-align:center;padding:20px;
+  }
+  #loadError.show{display:flex;}
+  #loadError h2{font-size:18px;margin:0;color:var(--magenta);}
+  #loadError p{font-family:var(--mono);font-size:12.5px;color:var(--text-dim);max-width:440px;line-height:1.6;}
+
+  .hud{position:fixed;inset:0;z-index:10;pointer-events:none;display:flex;flex-direction:column;}
+  .hud > *{pointer-events:auto;}
+
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+    padding:16px 22px;background:linear-gradient(to bottom, rgba(6,3,10,0.78), transparent);
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .dot{position:relative;width:7px;height:7px;border-radius:50%;background:var(--magenta);box-shadow:0 0 10px var(--magenta);animation:pulse 2.2s ease-in-out infinite;}
+  .brand .dot::before{content:'';position:absolute;inset:-6px;border:1px dashed var(--gold-dim);border-radius:50%;animation:spin 6s linear infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.25;}}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .brand .name{font-family:var(--display);font-weight:700;font-size:14.5px;letter-spacing:.01em;color:#e7d9f2;}
+  .brand .name small{color:var(--text-dim);font-weight:500;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;margin-left:8px;}
+
+  .tabs{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:4px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);}
+  .tab-btn{
+    font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-faint);
+    background:none;border:none;padding:9px 15px;border-radius:8px;cursor:pointer;transition:.18s;white-space:nowrap;
+  }
+  .tab-btn:hover{color:var(--text-dim);}
+  .tab-btn.active{background:rgba(255,61,129,0.1);color:var(--magenta);text-shadow:0 0 10px rgba(255,61,129,.4);box-shadow:inset 0 0 0 1px rgba(255,61,129,.3);}
+
+  .hud-mid{flex:1;position:relative;display:flex;justify-content:space-between;align-items:flex-start;padding:0 18px;gap:14px;}
+
+  .panel{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    box-shadow:0 12px 40px rgba(0,0,0,0.4);
+  }
+  .panel-hd{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);
+    padding:12px 16px 10px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line-soft);}
+  .panel-hd .tag{color:var(--violet);}
+  .panel-hd .tag::before{content:'§ ';color:var(--text-faint);}
+
+  /* left: live readouts */
+  .panel-left{width:262px;max-width:calc(50vw - 30px);margin-top:2px;}
+  .ro-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line-soft);}
+  .ro-cell{background:rgba(16,9,22,0.6);padding:11px 13px;}
+  .ro-cell.wide{grid-column:1/3;}
+  .ro-cell .k{font-family:var(--mono);font-size:9.2px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;}
+  .ro-cell .v{font-family:var(--mono);font-size:14px;color:var(--text);font-weight:600;line-height:1.25;}
+  .ro-cell .v.hi{color:var(--gold);text-shadow:0 0 9px rgba(242,193,78,.5);}
+  .ro-cell .v.te{color:var(--teal);text-shadow:0 0 9px rgba(79,224,201,.5);}
+  .ro-cell .v.warn{color:var(--magenta);text-shadow:0 0 9px rgba(255,61,129,.45);}
+  .ro-cell .u{font-size:9.5px;color:var(--text-dim);font-weight:400;margin-left:2px;}
+  #stageBlurb{margin:10px 13px 12px;font-family:var(--mono);font-size:10.2px;color:var(--text-faint);line-height:1.6;}
+
+  /* right: controls */
+  .panel-right{width:296px;max-width:calc(50vw - 30px);max-height:calc(100vh - 210px);overflow-y:auto;margin-top:2px;}
+  .panel-right::-webkit-scrollbar{width:6px;} .panel-right::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px;}
+  .ctrl-block{padding:13px 16px;border-bottom:1px solid var(--line-soft);}
+  .ctrl-block:last-child{border-bottom:none;}
+  .ctrl-block h3{font-size:12px;margin:0 0 11px;color:var(--text);font-weight:600;display:flex;align-items:center;justify-content:space-between;}
+  .ctrl-block h3 small{font-family:var(--mono);font-weight:400;color:var(--text-faint);font-size:9.3px;}
+  .field{margin-bottom:11px;} .field:last-child{margin-bottom:0;}
+  .field label{display:flex;justify-content:space-between;font-size:11.3px;color:var(--text-dim);margin-bottom:6px;}
+  .field label .val{color:var(--gold);font-family:var(--mono);font-weight:600;text-shadow:0 0 7px rgba(242,193,78,.4);}
+  input[type=range]{-webkit-appearance:none;width:100%;height:3px;border-radius:2px;background:var(--line);outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px rgba(242,193,78,.6);cursor:pointer;border:2px solid #1a0f08;}
+  input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--gold);border:2px solid #1a0f08;cursor:pointer;}
+  .seg{display:flex;gap:5px;flex-wrap:wrap;}
+  .seg button{flex:1;min-width:56px;background:var(--panel-2);border:1px solid var(--line);color:var(--text-dim);font-family:var(--mono);font-size:10px;padding:7px 5px;border-radius:7px;cursor:pointer;transition:.15s;}
+  .seg button:hover{border-color:rgba(255,150,210,.4);color:var(--text);}
+  .seg button.active{background:rgba(255,61,129,0.12);border-color:var(--magenta);color:var(--magenta);}
+  .note{margin-top:9px;font-family:var(--mono);font-size:9.8px;color:var(--text-faint);line-height:1.6;}
+
+  .hud-bottom{padding:12px 18px 18px;}
+  .event-panel{max-width:1180px;margin:0 auto;}
+  .ev-head{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 16px 8px;}
+  .fire-btn{
+    background:linear-gradient(135deg, var(--gold), #c98f2e);color:#20130a;font-family:var(--mono);
+    font-weight:700;font-size:12.5px;letter-spacing:.05em;border:none;padding:12px 22px;
+    cursor:pointer;box-shadow:0 4px 22px rgba(242,193,78,.25);transition:.15s;text-transform:uppercase;white-space:nowrap;border-radius:8px;
+  }
+  .fire-btn:hover{transform:translateY(-1px);box-shadow:0 6px 28px rgba(242,193,78,.38);}
+  .fire-btn:active{transform:translateY(0px) scale(.98);}
+  .route-select select{background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:11px;padding:9px 12px;border-radius:8px;outline:none;max-width:100%;}
+
+  /* cascade bar chart - signature element */
+  .cascade{padding:4px 16px 8px;}
+  .cascade-row{display:flex;align-items:center;gap:10px;margin-bottom:5px;}
+  .cascade-label{font-family:var(--mono);font-size:9.5px;color:var(--text-faint);width:150px;flex-shrink:0;text-align:right;}
+  .cascade-track{flex:1;height:14px;background:rgba(255,255,255,0.03);border-radius:3px;overflow:hidden;position:relative;}
+  .cascade-fill{height:100%;border-radius:3px;width:2%;transition:width .5s ease;}
+  .cascade-val{font-family:var(--mono);font-size:10px;color:var(--text-dim);width:92px;flex-shrink:0;}
+
+  .ev-log{font-family:var(--mono);font-size:10.6px;color:var(--text-faint);max-height:44px;overflow-y:auto;line-height:1.7;padding:8px 16px 12px;border-top:1px solid var(--line-soft);}
+
+  .scope-note{
+    font-family:var(--mono);font-size:10px;color:var(--text-faint);max-width:1180px;margin:0 auto 10px;
+    padding:8px 14px;line-height:1.6;
+  }
+  .scope-note b{color:var(--text-dim);}
+
+  @media (max-width:880px){
+    .hud-mid{flex-direction:column;padding:0 12px;gap:10px;}
+    .panel-left,.panel-right{width:100%;max-width:100%;max-height:34vh;}
+    .topbar{padding:12px 14px;}
+    .ev-head{flex-direction:column;align-items:stretch;}
+    .fire-btn{width:100%;}
+    .cascade-label{width:110px;font-size:8.6px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="loader"><div class="orbit"><div class="e1"></div><div class="e2"></div><div class="p"></div></div><div class="txt">Cooling antiprotons toward <span class="accent">100&nbsp;keV</span>…</div></div>
+<div class="grid-overlay"></div>
+<div class="drift"></div>
+<div id="loadError">
+  <h2>3D engine failed to load</h2>
+  <p>This simulator loads Three.js from a CDN at runtime and needs an internet connection to render the 3D views. The physics panels below still work off cached values — check your connection and reload to restore the 3D scene.</p>
+</div>
+
+<div id="stage"><canvas id="mainCanvas"></canvas></div>
+<div class="vignette"></div>
+<div id="flashOverlay"></div>
+<div class="grain-note">drag to orbit · scroll to zoom<br>physics engine live from technical overview §2–§8</div>
+
+<div class="hud">
+  <div class="topbar">
+    <div class="brand">
+      <span class="dot"></span>
+      <span class="name">Antimatter Factory Simulator <small>AD · ELENA · Penning trap</small></span>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" data-view="production">⊙ Production &amp; Collection</button>
+      <button class="tab-btn" data-view="decel">◎ AD / ELENA Ring</button>
+      <button class="tab-btn" data-view="trap">⬡ Trap &amp; Synthesis</button>
+    </div>
+  </div>
+
+  <div class="hud-mid">
+    <!-- LEFT: live readouts -->
+    <div class="panel panel-left">
+      <div class="panel-hd"><span class="tag" id="secTag">2</span> Live Physics Readout</div>
+      <div class="ro-grid" id="roGrid">
+        <!-- populated per view -->
+      </div>
+      <div id="stageBlurb"></div>
+    </div>
+  </div>
+
+  <div class="hud-bottom">
+    <div class="panel event-panel">
+      <div class="ev-head">
+        <button class="fire-btn" id="runBtn">▶ Run production cycle</button>
+        <div class="route-select">
+          <select id="routeSelect">
+            <option value="ad">Trap injection via AD only — thick degrader (§6.4)</option>
+            <option value="elena" selected>Trap injection via ELENA — thin degrader (§5.3)</option>
+          </select>
+        </div>
+      </div>
+      <div class="cascade" id="cascadeWrap"></div>
+      <div class="ev-log" id="eventLog">&gt; Standing by. Run a production cycle to trace one pulse from target to trapped antihydrogen.</div>
+    </div>
+    <div class="scope-note">
+      <b>What this is:</b> every readout is computed live from the report's formulas — production yield N<sub>p̄</sub> (eq. 8), adiabatic emittance ε∝1/p (eq. 14), cyclotron/magnetron frequencies ω<sub>c</sub>, ω<sub>±</sub> (eqs. 21–26), three-body recombination scaling k₃∝T<sup>-9/2</sup> (eq. 32), and neutral trap depth U<sub>max</sub>=μ<sub>B</sub>B (eq. 35). Move the sliders on the right in each tab. <b>What this isn't:</b> the 3D scene is a stylized, physically-motivated renderer, not a GEANT4/beam-dynamics Monte Carlo — and the final trapped-atom count is an illustrative order-of-magnitude estimate, not a precision prediction.
+    </div>
+  </div>
+
+  <!-- RIGHT controls, floated via JS-managed panel so it sits after left panel visually on wide screens -->
+  <div class="panel panel-right" id="controlsPanel" style="position:fixed; top:74px; right:18px;">
+    <div class="panel-hd"><span class="tag" id="secTag2">2</span> Parameters</div>
+    <div id="ctrlBody"></div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+window.__afReady = false;
+setTimeout(()=>{ if(!window.__afReady){ document.getElementById('loadError').classList.add('show'); document.getElementById('loader').classList.add('hidden'); } }, 9000);
+window.addEventListener('error', ()=>{ if(!window.__afReady){ document.getElementById('loadError').classList.add('show'); } });
+
+try{
+(function main(){
+
+const $ = id => document.getElementById(id);
+
+// ============================================================
+// PHYSICS CONSTANTS & FORMULAS (from Antimatter Factories report)
+// ============================================================
+const MP_GEV = 0.938272;           // proton/antiproton rest mass, GeV
+const MP_KG  = 1.67262192e-27;     // kg
+const Q_E    = 1.602176634e-19;    // C
+const MU_B_EV_PER_T = 5.79e-5;     // eV/T, Bohr magneton (eq. 35)
+const KB_EV_PER_K   = 8.617333e-5; // eV/K
+
+const THRESHOLD_T_GEV = 6*MP_GEV;  // eq. 4, ≈5.63 GeV kinetic threshold
+
+// AD / ELENA deceleration ladder — Table §4.2
+const LADDER = [
+  {label:'Injection',        p:3.57,   pUnit:'GeV/c', ke:'3.02 GeV', cooling:'Stochastic', beta:0.970},
+  {label:'Plateau 1',        p:2.00,   pUnit:'GeV/c', ke:'1.27 GeV', cooling:'Stochastic', beta:0.905},
+  {label:'Plateau 2',        p:0.30,   pUnit:'GeV/c', ke:'43 MeV',   cooling:'Electron',   beta:0.305},
+  {label:'AD extraction',    p:0.10,   pUnit:'GeV/c', ke:'5.3 MeV',  cooling:'Electron',   beta:0.106},
+  {label:'ELENA extraction', p:0.0134, pUnit:'GeV/c', ke:'100 keV',  cooling:'Electron',   beta:0.0143},
+];
+
+function fmt(x,d=3){
+  if(!isFinite(x)) return '—';
+  if(x===0) return '0';
+  const ax=Math.abs(x);
+  if(ax>=1e5||ax<1e-3) return x.toExponential(2);
+  return x.toPrecision(d);
+}
+function fmtInt(x){
+  if(!isFinite(x)) return '—';
+  if(x<1) return x.toExponential(2);
+  if(x>=1e6) return x.toExponential(2);
+  return Math.round(x).toLocaleString();
+}
+
+// ============================================================
+// STATE
+// ============================================================
+let view = 'production';
+let route = 'elena';
+
+let prod = { Np:1.5e13, lOverLambda:1.5, Y:1.0e-6, etaAcc:0.003 };
+let decel = { stageIdx:0 };
+let trap  = { B0:1.0, V0:1000, d:0.010, Tpos:100, Bmax:1.0, nPositrons:5e8 };
+
+// ---- production physics: eq. 8 ----
+function computeProduction(){
+  const capture = 1 - Math.exp(-prod.lOverLambda);
+  const Npbar = prod.Np * capture * prod.Y * prod.etaAcc;
+  return { capture, Npbar };
+}
+
+// ---- deceleration: adiabatic emittance eq. 14, relative to injection ----
+function computeDecel(){
+  const st = LADDER[decel.stageIdx];
+  const p0 = LADDER[0].p;
+  const relEmittance = p0/st.p; // ε ∝ 1/p
+  const gamma = 1/Math.sqrt(Math.max(1e-12,1-st.beta*st.beta));
+  return { st, relEmittance, gamma };
+}
+
+// ---- Penning trap: eqs. 21-26 ----
+function computeTrap(){
+  const wc = (Q_E*trap.B0*1)/MP_KG; // rad/s ; matches eq22 ~9.58e7 at 1T
+  const wz = Math.sqrt( (2*Q_E*trap.V0) / (MP_KG*trap.d*trap.d) );
+  const half = wc/2;
+  const disc = half*half - (wz*wz)/2;
+  let wPlus=NaN, wMinus=NaN;
+  if(disc>=0){
+    const s = Math.sqrt(disc);
+    wPlus = half+s; wMinus = half-s;
+  }
+  return { wc, wz, wPlus, wMinus };
+}
+
+// ---- positron cooling: three-body recombination eq. 32, k3 ∝ T^-4.5 ----
+function computeRecomb(){
+  const T_REF = 300; // K reference baseline
+  const relRate = Math.pow(T_REF/trap.Tpos, 4.5);
+  return { relRate };
+}
+
+// ---- neutral trap depth: eq. 35 ----
+function computeNeutralTrap(){
+  const Umax_eV = MU_B_EV_PER_T * trap.Bmax;
+  const Umax_K = Umax_eV/KB_EV_PER_K;
+  return { Umax_eV, Umax_K };
+}
+
+// ============================================================
+// CASCADE (production cycle) — uses report figures + labeled illustrative steps
+// ============================================================
+function runCascade(){
+  const {Npbar} = computeProduction();
+  const degraderEff = route==='ad' ? 0.01 : 0.20; // §6.4: ~1% (AD, thick foil) vs ~10-30% (ELENA, thin foil)
+  const trapped_pbar = Npbar * degraderEff;
+  const {relRate} = computeRecomb();
+  const {Umax_K} = computeNeutralTrap();
+  // illustrative synthesis + neutral-capture fraction, anchored to report's O(1-100)/cycle at Umax~0.67K
+  const synthFrac = Math.min(1, 2e-3 * Math.min(relRate,50)/50 + 5e-4);
+  const Hbar_formed = Math.min(trapped_pbar, trap.nPositrons) * synthFrac;
+  const captureFrac = Math.min(0.01, 0.012*(Umax_K/0.67));
+  const Hbar_trapped = Math.max(0, Hbar_formed*captureFrac);
+
+  const stages = [
+    {label:'Protons on target', val: prod.Np},
+    {label:'p̄ captured (eq.8)', val: Npbar},
+    {label:route==='ad'?'p̄ into trap (AD route)':'p̄ into trap (ELENA route)', val: trapped_pbar},
+    {label:'H̄ atoms synthesized', val: Hbar_formed},
+    {label:'H̄ atoms neutral-trapped', val: Hbar_trapped},
+  ];
+  renderCascade(stages);
+  const roundedHbar = Math.max(0, Math.round(Hbar_trapped));
+  log(`Pulse fired · ${fmtInt(prod.Np)} p → ${fmtInt(Npbar)} p̄ captured → ${fmtInt(trapped_pbar)} into trap (${route.toUpperCase()} route) → ~${roundedHbar} H̄ atom(s) neutral-trapped this cycle.`);
+  flash();
+  return stages;
+}
+
+function renderCascade(stages){
+  const wrap = $('cascadeWrap');
+  const maxV = Math.max(...stages.map(s=>Math.max(s.val,1)));
+  const colors = ['#f2c14e','#e0a53f','#c98f2e','#4fe0c9','#ff3d81'];
+  wrap.innerHTML = stages.map((s,i)=>{
+    const logv = Math.log10(Math.max(s.val,0.1)+1);
+    const logmax = Math.log10(maxV+1);
+    const pct = Math.max(2, (logv/logmax)*100);
+    return `<div class="cascade-row">
+      <div class="cascade-label">${s.label}</div>
+      <div class="cascade-track"><div class="cascade-fill" style="width:${pct}%;background:${colors[i%colors.length]};box-shadow:0 0 10px ${colors[i%colors.length]}66;"></div></div>
+      <div class="cascade-val">${fmtInt(s.val)}</div>
+    </div>`;
+  }).join('');
+}
+renderCascade([
+  {label:'Protons on target', val:1.5e13},
+  {label:'p̄ captured (eq.8)', val:0},
+  {label:'p̄ into trap', val:0},
+  {label:'H̄ atoms synthesized', val:0},
+  {label:'H̄ atoms neutral-trapped', val:0},
+]);
+
+let logTimer=null;
+function log(msg){
+  const el = $('eventLog');
+  el.textContent = '> '+msg;
+}
+
+function flash(){
+  const f = $('flashOverlay');
+  f.style.transition='none'; f.style.opacity='0.55';
+  requestAnimationFrame(()=>{
+    f.style.transition='opacity 1.1s ease';
+    f.style.opacity='0';
+  });
+}
+
+$('runBtn').addEventListener('click', runCascade);
+$('routeSelect').addEventListener('change', e=>{ route = e.target.value; });
+
+// ============================================================
+// UI: readouts + controls per view
+// ============================================================
+const secTags = {production:'2–3', decel:'4', trap:'6–8'};
+const blurbs = {
+  production:'Fixed-target p+p→p+p+p+p̄ (eq.1). Threshold kinetic energy 6m_pc² ≈ 5.63 GeV (eq.4). Secondaries are collected by a lithium-lens / magnetic horn (§3) before injection into the AD.',
+  decel:'The AD (and downstream ELENA) decelerate in discrete RF plateaus, alternating stochastic cooling (GeV-scale, dense→sparse beam) and electron cooling (sub-GeV, dense/slow beam) to counter adiabatic emittance growth (eq.14).',
+  trap:'Penning–Malmberg traps confine charged antiprotons radially by B₀ (cyclotron motion, eq.21) and axially by an electrostatic well (eq.23). Positrons from ²²Na β⁺-decay are cooled and merged for three-body recombination into antihydrogen (eq.31), then a small low-field-seeking fraction is held in a magnetic-minimum neutral trap (eq.34).'
+};
+
+function setView(v){
+  view = v;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
+  $('secTag').textContent = secTags[v];
+  $('secTag2').textContent = secTags[v];
+  $('stageBlurb').textContent = blurbs[v];
+  buildControls(v);
+  recompute();
+  SceneApp.setView(v);
+}
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>setView(btn.dataset.view));
+});
+
+function buildControls(v){
+  const body = $('ctrlBody');
+  if(v==='production'){
+    body.innerHTML = `
+      <div class="ctrl-block">
+        <h3>Beam pulse <small>§2.3</small></h3>
+        <div class="field"><label>Target thickness ℓ/λ<sub>int</sub> <span class="val" id="v_l">1.50</span></label>
+          <input type="range" id="i_l" min="0.2" max="3" step="0.05" value="1.5"></div>
+        <div class="field"><label>Yield / interaction Y<sub>p/p̄</sub> <span class="val" id="v_y">1.0×10⁻⁶</span></label>
+          <input type="range" id="i_y" min="-6" max="-5" step="0.02" value="-6"></div>
+        <div class="field"><label>Acceptance η<sub>acc</sub> <span class="val" id="v_eta">0.0030</span></label>
+          <input type="range" id="i_eta" min="0.001" max="0.010" step="0.0002" value="0.003"></div>
+        <div class="note">Historical CERN AD reference: ~26 GeV/c protons, 1.5×10¹³/pulse on iridium → ~3×10⁷ p̄ captured per pulse (order 10⁻⁶ overall efficiency).</div>
+      </div>`;
+    $('i_l').addEventListener('input', e=>{ prod.lOverLambda=+e.target.value; $('v_l').textContent=prod.lOverLambda.toFixed(2); recompute(); });
+    $('i_y').addEventListener('input', e=>{ prod.Y=Math.pow(10,+e.target.value); $('v_y').textContent=prod.Y.toExponential(1).replace('e-','×10⁻').replace('+','')+''; recompute(); });
+    $('i_eta').addEventListener('input', e=>{ prod.etaAcc=+e.target.value; $('v_eta').textContent=prod.etaAcc.toFixed(4); recompute(); });
+  } else if(v==='decel'){
+    body.innerHTML = `
+      <div class="ctrl-block">
+        <h3>Deceleration plateau <small>§4.2</small></h3>
+        <div class="seg" id="stageSeg">
+          ${LADDER.map((s,i)=>`<button data-i="${i}" class="${i===0?'active':''}">${s.label}</button>`).join('')}
+        </div>
+        <div class="note" id="stageNote"></div>
+      </div>`;
+    document.querySelectorAll('#stageSeg button').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.querySelectorAll('#stageSeg button').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        decel.stageIdx = +btn.dataset.i;
+        recompute();
+        SceneApp.setDecelStage(decel.stageIdx);
+      });
+    });
+  } else if(v==='trap'){
+    body.innerHTML = `
+      <div class="ctrl-block">
+        <h3>Penning trap <small>§6.1–6.3</small></h3>
+        <div class="field"><label>Axial field B₀ <span class="val" id="v_b0">1.00 T</span></label>
+          <input type="range" id="i_b0" min="1" max="5" step="0.05" value="1"></div>
+        <div class="field"><label>Well depth qV₀ <span class="val" id="v_v0">1000 V</span></label>
+          <input type="range" id="i_v0" min="100" max="3000" step="20" value="1000"></div>
+        <div class="field"><label>Electrode length d <span class="val" id="v_d">10.0 mm</span></label>
+          <input type="range" id="i_d" min="5" max="20" step="0.5" value="10"></div>
+      </div>
+      <div class="ctrl-block">
+        <h3>Positron plasma <small>§5.1 · eq.32</small></h3>
+        <div class="field"><label>Temperature T<sub>e+</sub> <span class="val" id="v_t">100 K</span></label>
+          <input type="range" id="i_t" min="4" max="300" step="1" value="100"></div>
+        <div class="field"><label>Accumulated N<sub>e+</sub> <span class="val" id="v_np">5.0×10⁸</span></label>
+          <input type="range" id="i_np" min="8" max="9" step="0.02" value="8.7"></div>
+      </div>
+      <div class="ctrl-block">
+        <h3>Neutral trap <small>§8.2 · eq.35</small></h3>
+        <div class="field"><label>Octupole B<sub>max</sub> <span class="val" id="v_bmax">1.00 T</span></label>
+          <input type="range" id="i_bmax" min="0.3" max="2" step="0.02" value="1"></div>
+      </div>`;
+    $('i_b0').addEventListener('input', e=>{ trap.B0=+e.target.value; $('v_b0').textContent=trap.B0.toFixed(2)+' T'; recompute(); });
+    $('i_v0').addEventListener('input', e=>{ trap.V0=+e.target.value; $('v_v0').textContent=Math.round(trap.V0)+' V'; recompute(); });
+    $('i_d').addEventListener('input', e=>{ trap.d=(+e.target.value)/1000; $('v_d').textContent=(+e.target.value).toFixed(1)+' mm'; recompute(); });
+    $('i_t').addEventListener('input', e=>{ trap.Tpos=+e.target.value; $('v_t').textContent=Math.round(trap.Tpos)+' K'; recompute(); });
+    $('i_np').addEventListener('input', e=>{ trap.nPositrons=Math.pow(10,+e.target.value); $('v_np').textContent=trap.nPositrons.toExponential(1).replace('e+','×10^'); recompute(); });
+    $('i_bmax').addEventListener('input', e=>{ trap.Bmax=+e.target.value; $('v_bmax').textContent=trap.Bmax.toFixed(2)+' T'; recompute(); });
+  }
+}
+
+function recompute(){
+  const grid = $('roGrid');
+  if(view==='production'){
+    const {capture,Npbar} = computeProduction();
+    grid.innerHTML = `
+      <div class="ro-cell wide"><div class="k">Threshold kinetic energy (eq.4)</div><div class="v hi">${THRESHOLD_T_GEV.toFixed(2)}<span class="u">GeV</span></div></div>
+      <div class="ro-cell"><div class="k">Target capture fraction</div><div class="v">${(capture*100).toFixed(1)}<span class="u">%</span></div></div>
+      <div class="ro-cell"><div class="k">Protons / pulse</div><div class="v">${fmtInt(prod.Np)}</div></div>
+      <div class="ro-cell wide"><div class="k">p̄ captured / pulse (eq.8)</div><div class="v hi">${fmtInt(Npbar)}</div></div>
+      <div class="ro-cell wide"><div class="k">Overall efficiency N<sub>p̄</sub>/N<sub>p</sub></div><div class="v">${fmt(Npbar/prod.Np,3)}</div></div>
+    `;
+  } else if(view==='decel'){
+    const {st, relEmittance, gamma} = computeDecel();
+    grid.innerHTML = `
+      <div class="ro-cell wide"><div class="k">Stage</div><div class="v hi">${st.label}</div></div>
+      <div class="ro-cell"><div class="k">Momentum</div><div class="v">${st.p}<span class="u">${st.pUnit}</span></div></div>
+      <div class="ro-cell"><div class="k">Kinetic energy</div><div class="v">${st.ke}</div></div>
+      <div class="ro-cell"><div class="k">β = v/c</div><div class="v">${st.beta.toFixed(4)}</div></div>
+      <div class="ro-cell"><div class="k">Lorentz γ</div><div class="v">${gamma.toFixed(4)}</div></div>
+      <div class="ro-cell"><div class="k">Cooling applied</div><div class="v te">${st.cooling}</div></div>
+      <div class="ro-cell wide"><div class="k">Rel. geometric emittance ε∝1/p (eq.14)</div><div class="v warn">${relEmittance.toFixed(1)}×</div></div>
+    `;
+  } else if(view==='trap'){
+    const {wc,wz,wPlus,wMinus} = computeTrap();
+    const {relRate} = computeRecomb();
+    const {Umax_eV,Umax_K} = computeNeutralTrap();
+    grid.innerHTML = `
+      <div class="ro-cell wide"><div class="k">Cyclotron freq ω_c (eq.22)</div><div class="v hi">${fmt(wc,3)}<span class="u">rad/s</span></div></div>
+      <div class="ro-cell"><div class="k">Axial ω_z (eq.24)</div><div class="v">${fmt(wz,3)}</div></div>
+      <div class="ro-cell"><div class="k">Mod. cyclotron ω₊</div><div class="v">${isNaN(wPlus)?'—':fmt(wPlus,3)}</div></div>
+      <div class="ro-cell"><div class="k">Magnetron ω₋</div><div class="v">${isNaN(wMinus)?'—':fmt(wMinus,3)}</div></div>
+      <div class="ro-cell"><div class="k">ω₊+ω₋ = ω_c check</div><div class="v te">${isNaN(wPlus)?'—':fmt(wPlus+wMinus,3)}</div></div>
+      <div class="ro-cell wide"><div class="k">3-body recomb. rate vs 300K (eq.32, k₃∝T⁻⁴·⁵)</div><div class="v warn">${relRate>=1000?fmt(relRate,3):relRate.toFixed(1)}×</div></div>
+      <div class="ro-cell"><div class="k">Neutral trap depth (eq.35)</div><div class="v hi">${Umax_eV.toExponential(2)}<span class="u">eV</span></div></div>
+      <div class="ro-cell"><div class="k">Trap depth in temperature</div><div class="v hi">${Umax_K.toFixed(3)}<span class="u">K</span></div></div>
+    `;
+  }
+}
+
+
+const canvas = $('mainCanvas');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio||1));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0b0612, 0.012);
+const camera = new THREE.PerspectiveCamera(52, window.innerWidth/window.innerHeight, 0.1, 500);
+camera.position.set(10,7,14);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 3; controls.maxDistance = 60;
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth,window.innerHeight), 0.85, 0.5, 0.15);
+composer.addPass(bloomPass);
+composer.addPass(new OutputPass());
+
+scene.add(new THREE.AmbientLight(0x4a3060, 1.1));
+const key = new THREE.PointLight(0xf2c14e, 30, 60); key.position.set(8,10,6); scene.add(key);
+const rim = new THREE.PointLight(0xff3d81, 18, 50); rim.position.set(-10,4,-8); scene.add(rim);
+const teal = new THREE.PointLight(0x4fe0c9, 14, 40); teal.position.set(0,-6,10); scene.add(teal);
+
+// starfield
+{
+  const n=1400; const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(n*3);
+  for(let i=0;i<n;i++){
+    const r = 60+Math.random()*120;
+    const th = Math.random()*Math.PI*2, ph = Math.acos(2*Math.random()-1);
+    pos[i*3] = r*Math.sin(ph)*Math.cos(th);
+    pos[i*3+1] = r*Math.sin(ph)*Math.sin(th);
+    pos[i*3+2] = r*Math.cos(ph);
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  const mat = new THREE.PointsMaterial({color:0x8a7aa0, size:0.35, transparent:true, opacity:0.5});
+  scene.add(new THREE.Points(geo,mat));
+}
+
+// ---------------- Group: PRODUCTION ----------------
+const gProd = new THREE.Group(); scene.add(gProd);
+{
+  const beamLine = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.06,0.06,10,12).rotateZ(Math.PI/2).translate(-8,0,0),
+    new THREE.MeshBasicMaterial({color:0x4fe0c9, transparent:true, opacity:0.25})
+  );
+  gProd.add(beamLine);
+
+  const target = new THREE.Mesh(
+    new THREE.BoxGeometry(0.6,1.2,1.2),
+    new THREE.MeshStandardMaterial({color:0x2a2233, metalness:0.8, roughness:0.35, emissive:0x33111a, emissiveIntensity:0.4})
+  );
+  target.position.set(-2.5,0,0);
+  gProd.add(target);
+
+  // lithium-lens horn: lathe geometry, focal cone shape
+  const hornPts = [];
+  for(let i=0;i<=20;i++){
+    const t=i/20; const x = t*4; const r = 0.15 + Math.pow(1-t,1.6)*1.6;
+    hornPts.push(new THREE.Vector2(r, x));
+  }
+  const hornGeo = new THREE.LatheGeometry(hornPts, 28);
+  hornGeo.rotateZ(Math.PI/2); hornGeo.translate(-1.6,0,0);
+  const hornMat = new THREE.MeshStandardMaterial({color:0xf2c14e, metalness:0.6, roughness:0.3, wireframe:true, transparent:true, opacity:0.5});
+  const horn = new THREE.Mesh(hornGeo, hornMat);
+  gProd.add(horn);
+
+  const toAD = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.05,0.05,6,10).rotateZ(Math.PI/2).translate(5.5,0,0),
+    new THREE.MeshBasicMaterial({color:0xf2c14e, transparent:true, opacity:0.3})
+  );
+  gProd.add(toAD);
+
+  // moving proton dots
+  const nDots=24; const protonDots=[];
+  const dotGeo = new THREE.SphereGeometry(0.06,8,8);
+  for(let i=0;i<nDots;i++){
+    const m = new THREE.Mesh(dotGeo, new THREE.MeshBasicMaterial({color:0x4fe0c9}));
+    m.userData.phase = i/nDots;
+    gProd.add(m); protonDots.push(m);
+  }
+  const nSec=60; const secDots=[];
+  const secGeo = new THREE.SphereGeometry(0.045,6,6);
+  for(let i=0;i<nSec;i++){
+    const m = new THREE.Mesh(secGeo, new THREE.MeshBasicMaterial({color:0xf2c14e}));
+    m.userData.phase = Math.random();
+    m.userData.spread = (Math.random()-0.5);
+    gProd.add(m); secDots.push(m);
+  }
+  gProd.userData = {protonDots, secDots};
+}
+
+// ---------------- Group: DECELERATION (AD/ELENA) ----------------
+const gDecel = new THREE.Group(); scene.add(gDecel);
+let decelPacket, decelRingMeshes=[], elenaRing;
+{
+  const R = 6.5;
+  const ringGeo = new THREE.TorusGeometry(R, 0.09, 8, 96);
+  const ringMat = new THREE.MeshStandardMaterial({color:0x6b4a8f, metalness:0.5, roughness:0.4, emissive:0x2a1a40, emissiveIntensity:0.3});
+  const ring = new THREE.Mesh(ringGeo, ringMat); ring.rotation.x = Math.PI/2;
+  gDecel.add(ring);
+
+  // 5 colored plateau arcs
+  const segColors = [0xb98bff,0xb98bff,0x4fe0c9,0x4fe0c9,0x4fe0c9];
+  for(let i=0;i<5;i++){
+    const a0 = (i/5)*Math.PI*2, a1 = ((i+0.92)/5)*Math.PI*2;
+    const curve = new THREE.EllipseCurve(0,0,R,R,a0,a1,false,0);
+    const pts = curve.getPoints(24).map(p=>new THREE.Vector3(p.x,0,p.y));
+    const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.14, 8, false);
+    const mat = new THREE.MeshBasicMaterial({color:segColors[i], transparent:true, opacity:0.55});
+    const seg = new THREE.Mesh(geo, mat);
+    gDecel.add(seg); decelRingMeshes.push(seg);
+  }
+
+  // ELENA: smaller nested ring
+  const eR = 3.0;
+  const eGeo = new THREE.TorusGeometry(eR, 0.06, 8, 72);
+  const eMat = new THREE.MeshStandardMaterial({color:0xf2c14e, metalness:0.4, roughness:0.4, emissive:0x3a2a08, emissiveIntensity:0.4});
+  elenaRing = new THREE.Mesh(eGeo, eMat); elenaRing.rotation.x = Math.PI/2; elenaRing.position.y=-0.6;
+  gDecel.add(elenaRing);
+
+  // transfer line
+  const transferGeo = new THREE.CylinderGeometry(0.04,0.04, R-eR, 8).rotateZ(Math.PI/2).translate((R+eR)/2,-0.3,0);
+  gDecel.add(new THREE.Mesh(transferGeo, new THREE.MeshBasicMaterial({color:0xff3d81, transparent:true, opacity:0.4})));
+
+  // RF cavity marker
+  const cav = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.5,0.9), new THREE.MeshStandardMaterial({color:0xff3d81, emissive:0xff3d81, emissiveIntensity:0.6}));
+  cav.position.set(R,0.4,0);
+  gDecel.add(cav); gDecel.userData.cavity = cav;
+
+  // moving packet
+  decelPacket = new THREE.Mesh(new THREE.SphereGeometry(0.22,16,16), new THREE.MeshBasicMaterial({color:0xf2c14e}));
+  gDecel.add(decelPacket);
+  gDecel.userData.R = R; gDecel.userData.eR = eR;
+}
+
+// ---------------- Group: TRAP & SYNTHESIS ----------------
+const gTrap = new THREE.Group(); scene.add(gTrap);
+let cyclotronDot, magnetronAnchor=0, positronPts, hbarFlash;
+{
+  // electrode stack (Penning-Malmberg)
+  const nElec = 9;
+  for(let i=0;i<nElec;i++){
+    const t = i/(nElec-1);
+    const z = (t-0.5)*6;
+    const isEnd = (i===0||i===nElec-1);
+    const geo = new THREE.TorusGeometry(1.1, 0.06, 10, 28);
+    const mat = new THREE.MeshStandardMaterial({color: isEnd?0xff3d81:0xb98bff, metalness:0.6, roughness:0.35, emissive:isEnd?0x3a0a18:0x1a1030, emissiveIntensity:0.5});
+    const m = new THREE.Mesh(geo,mat); m.position.z=z;
+    gTrap.add(m);
+  }
+  // B field lines
+  for(let i=0;i<5;i++){
+    const ang = (i/5)*Math.PI*2; const rr = i===0?0:0.5;
+    const x = Math.cos(ang)*rr, y = Math.sin(ang)*rr;
+    const geo = new THREE.CylinderGeometry(0.012,0.012,7,6).rotateX(Math.PI/2).translate(x,y,0);
+    gTrap.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color:0x4fe0c9, transparent:true, opacity:0.35})));
+  }
+  // trapped antiproton (cyclotron + magnetron)
+  cyclotronDot = new THREE.Mesh(new THREE.SphereGeometry(0.14,14,14), new THREE.MeshBasicMaterial({color:0xf2c14e}));
+  gTrap.add(cyclotronDot);
+
+  // positron cloud
+  const nPos=140; const pgeo = new THREE.BufferGeometry();
+  const ppos = new Float32Array(nPos*3);
+  for(let i=0;i<nPos;i++){
+    const r = 0.4+Math.random()*0.5, th=Math.random()*Math.PI*2, z=(Math.random()-0.5)*1.4;
+    ppos[i*3]=Math.cos(th)*r; ppos[i*3+1]=Math.sin(th)*r; ppos[i*3+2]=z;
+  }
+  pgeo.setAttribute('position', new THREE.BufferAttribute(ppos,3));
+  positronPts = new THREE.Points(pgeo, new THREE.PointsMaterial({color:0x4fe0c9,size:0.09,transparent:true,opacity:0.85}));
+  gTrap.add(positronPts);
+
+  // synthesis flash placeholder
+  hbarFlash = new THREE.Mesh(new THREE.SphereGeometry(0.3,16,16), new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0}));
+  gTrap.add(hbarFlash);
+
+  // neutral (octupole) trap indicator, at end
+  for(let i=0;i<6;i++){
+    const ang=(i/6)*Math.PI*2;
+    const geo = new THREE.BoxGeometry(0.08,0.08,1.2);
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({color:0xb98bff, emissive:0xb98bff, emissiveIntensity:0.4}));
+    m.position.set(Math.cos(ang)*1.3, Math.sin(ang)*1.3, 4.2);
+    gTrap.add(m);
+  }
+}
+
+// ============================================================
+// VIEW SWITCHING / CAMERA PRESETS
+// ============================================================
+const camPresets = {
+  production: {pos:new THREE.Vector3(4,4,11), look:new THREE.Vector3(0,0,0)},
+  decel:      {pos:new THREE.Vector3(9,8,12), look:new THREE.Vector3(0,-0.3,0)},
+  trap:       {pos:new THREE.Vector3(5,3,7),  look:new THREE.Vector3(0,0,0)},
+};
+let camFrom = camera.position.clone(), camTo = camPresets.production.pos.clone(), camT=1;
+let lookFrom = new THREE.Vector3(0,0,0), lookTo = camPresets.production.look.clone(), lookCur = camPresets.production.look.clone();
+
+const SceneApp = {
+  setView(v){
+    gProd.visible = v==='production';
+    gDecel.visible = v==='decel';
+    gTrap.visible = v==='trap';
+    camFrom = camera.position.clone(); camTo = camPresets[v].pos.clone();
+    lookFrom = lookCur.clone(); lookTo = camPresets[v].look.clone();
+    camT = 0;
+  },
+  setDecelStage(i){ decel.stageIdx = i; }
+};
+
+// ============================================================
+// ANIMATION LOOP
+// ============================================================
+const clock = new THREE.Clock();
+let elapsed = 0;
+let synthCycle = 0;
+
+function updateProduction(dt){
+  const {protonDots, secDots} = gProd.userData;
+  protonDots.forEach(d=>{
+    d.userData.phase = (d.userData.phase + dt*0.35)%1;
+    const x = -8 + d.userData.phase*5.5;
+    d.position.set(x,0,0);
+    d.visible = d.userData.phase < 0.98;
+  });
+  secDots.forEach(d=>{
+    d.userData.phase = (d.userData.phase + dt*0.5)%1;
+    const t = d.userData.phase;
+    const x = -1.6 + t*9;
+    const spread = d.userData.spread * (t<0.45 ? (0.45-t)*1.8 : 0.02);
+    d.position.set(x, spread, spread*0.7);
+  });
+}
+
+function updateDecel(dt){
+  const R = gDecel.userData.R, eR = gDecel.userData.eR;
+  const st = LADDER[decel.stageIdx];
+  const speed = 0.15 + st.beta*0.9;
+  synthCycle += dt*speed;
+  const onElena = decel.stageIdx>=3;
+  const rr = onElena ? THREE.MathUtils.lerp(R,eR,Math.min(1,(decel.stageIdx-2))) : R;
+  const yy = onElena ? -0.6*Math.min(1,(decel.stageIdx-2)) : 0;
+  const ang = synthCycle;
+  decelPacket.position.set(Math.cos(ang)*rr, yy, Math.sin(ang)*rr);
+  const scale = 0.9 + 0.35*(st.p/LADDER[0].p);
+  decelPacket.scale.setScalar(scale);
+  gDecel.userData.cavity.material.emissiveIntensity = 0.4 + 0.5*Math.abs(Math.sin(elapsed*4));
+  decelRingMeshes.forEach((m,i)=>{ m.material.opacity = i===decel.stageIdx*1 ? 0.9 : (i<=decel.stageIdx?0.55:0.18); });
+}
+
+function updateTrap(dt){
+  const {wc} = computeTrap();
+  const wVis = Math.min(6, wc/1.6e7); // scaled for visible animation
+  const r = 0.55;
+  const ang = elapsed*wVis;
+  const magR = 0.15*Math.sin(elapsed*0.4);
+  cyclotronDot.position.set(Math.cos(ang)*r+magR, Math.sin(ang)*r, Math.sin(elapsed*0.6)*0.4);
+  positronPts.rotation.z += dt*0.4;
+  if(hbarFlash.material.opacity>0){
+    hbarFlash.material.opacity = Math.max(0, hbarFlash.material.opacity-dt*0.6);
+    hbarFlash.scale.setScalar(1+ (1-hbarFlash.material.opacity)*2);
+  }
+}
+
+function triggerSynthesisFlash(){
+  hbarFlash.position.set(0.3,0.1,0);
+  hbarFlash.material.opacity = 1;
+  hbarFlash.scale.setScalar(1);
+}
+const origRun = runCascade;
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(0.1, clock.getDelta());
+  elapsed += dt;
+
+  if(camT<1){
+    camT = Math.min(1, camT + dt*0.9);
+    const e = 1-Math.pow(1-camT,3);
+    camera.position.lerpVectors(camFrom, camTo, e);
+    lookCur.lerpVectors(lookFrom, lookTo, e);
+  }
+  camera.lookAt(lookCur);
+  controls.target.lerp(lookCur, 0.15);
+  controls.update();
+
+  if(gProd.visible) updateProduction(dt);
+  if(gDecel.visible) updateDecel(dt);
+  if(gTrap.visible) updateTrap(dt);
+
+  composer.render();
+}
+
+function resize(){
+  const w = window.innerWidth, h = window.innerHeight;
+  camera.aspect = w/h; camera.updateProjectionMatrix();
+  renderer.setSize(w,h,false);
+  composer.setSize(w,h);
+  bloomPass.resolution.set(w,h);
+}
+window.addEventListener('resize', resize);
+setView('production');
+resize();
+animate();
+
+// hook synthesis flash into the run button when trap view active
+$('runBtn').addEventListener('click', ()=>{ if(view==='trap') triggerSynthesisFlash(); });
+
+window.__afReady = true;
+document.getElementById('loader').classList.add('hidden');
+
+})();
+}catch(err){
+  console.error(err);
+  document.getElementById('loadError').classList.add('show');
+  document.getElementById('loader').classList.add('hidden');
+}
+</script>
+</body>
+</html>
